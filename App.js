@@ -498,7 +498,7 @@ function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
               {item.has360 && (
                 <TouchableOpacity style={nm.eyeBtn} activeOpacity={0.75}>
                   <IconEye360 size={16} color={C.maroon} />
-                  <Text style={[nm.eyeBtnText, { fontSize: F.xs }]}>360°</Text>
+                  
                 </TouchableOpacity>
               )}
 
@@ -1228,10 +1228,6 @@ const nm = StyleSheet.create({
     backgroundColor: C.maroonFaint, borderRadius: 8,
     paddingHorizontal: 8, paddingVertical: 5,
     borderWidth: 1, borderColor: C.maroonBorder, flexShrink: 0,
-  },
-  eyeBtnText: {
-    fontFamily: 'Montserrat_700Bold', fontSize: 8.5,
-    color: C.maroon, letterSpacing: 0.5,
   },
   nodeChevron: { flexShrink: 0, opacity: 0.4 },
 });
