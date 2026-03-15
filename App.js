@@ -56,11 +56,13 @@ const C = {
 
 const { width: SW, height: SH } = Dimensions.get('window');
 
+// ─── Helpers: charcoal + bold for 40+, gray + regular otherwise ──────────────
+const subFont  = (ageRange) => ageRange === 'Enhanced' ? 'Montserrat_700Bold' : 'Montserrat_400Regular';
+
 // ─── Font size scales per age range ──────────────────────────────────────────
 const FONT_SCALE = {
-  '18-30': { xs: 13,  sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
-  '30-40': { xs: 14, sm: 15.5, md: 17.5, lg: 21,  xl: 25,  xxl: 27, hero: 40 },
-  '40+':   { xs: 15, sm: 16.5, md: 18.5, lg: 22,  xl: 26,  xxl: 33, hero: 41 },
+  'Classic': { xs: 13,  sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
+  'Enhanced':   { xs: 15, sm: 16.5, md: 18.5, lg: 22,  xl: 26,  xxl: 33, hero: 41 },
 };
 
 // ─── Sample nodes data ────────────────────────────────────────────────────────
@@ -188,12 +190,13 @@ function AgeSelectionScreen({ onNext }) {
   }, []);
 
   const ages = [
-    { key: '18-30', label: '18 – 30',  sub: 'Young Adult',  emoji: '🎓' },
-    { key: '30-40', label: '30 – 40',  sub: 'Professional', emoji: '💼' },
-    { key: '40+',   label: '40 +',     sub: 'Senior',       emoji: '🌟' },
+    { key: 'Classic', label: 'Classic',  sub: 'A balanced, standard display',  emoji: '⚖️' },
+    { key: 'Enhanced',   label: 'Enhanced', sub: 'Larger text and bolder contrast for easier reading.', emoji: '🔍' },
   ];
+
+  // Age selection screen has no ageRange yet — use default C.gray
+
   return (
-    
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
 
@@ -210,7 +213,6 @@ function AgeSelectionScreen({ onNext }) {
               Campus Navigator
             </Text>
           </View>
-          
         </View>
       </LinearGradient>
       <View style={s.topAccent} />
@@ -229,10 +231,10 @@ function AgeSelectionScreen({ onNext }) {
             <View style={s.stepLine} />
             <View style={s.stepDot} />
           </View>
-          <Text style={s.stepLabel}>Step 1 of 2</Text>
+          <Text style={[s.stepLabel]}>Step 1 of 2</Text>
 
-          <Text style={s.ageTitle} >How old are you?</Text>
-          <Text style={s.ageSub}>
+          <Text style={s.ageTitle}>How do you prefer your reading experience?</Text>
+          <Text style={[s.ageSub, { color: C.charcoal }]}>
             We'll adjust the display to make navigation easier for you.
           </Text>
 
@@ -266,16 +268,15 @@ function AgeSelectionScreen({ onNext }) {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={s.nextBtnGrad}
             >
-              <Text style={[s.nextBtnText, !selected && { color: C.gray }]}>Next</Text>
-              <IconArrow size={16} color={selected ? C.white : C.gray} />
+              <Text style={[s.nextBtnText]}>Next</Text>
+              <IconArrow size={16} />
             </LinearGradient>
           </TouchableOpacity>
 
-          <Text style={s.hintText}>
+          <Text style={[s.hintText]}>
             Please select your age range to continue
           </Text>
         </Animated.View>
-
       </ScrollView>
     </View>
   );
@@ -286,7 +287,8 @@ function AgeSelectionScreen({ onNext }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function UserTypeScreen({ ageRange, onBack, onFinish }) {
   const [selected, setSelected] = useState(null);
-  const F = FONT_SCALE[ageRange];
+  const F  = FONT_SCALE[ageRange];
+  const SF = subFont(ageRange);
   const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(30)).current;
 
@@ -341,10 +343,10 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
             <View style={[s.stepLine, { backgroundColor: C.maroon }]} />
             <View style={[s.stepDot, s.stepDotActive]} />
           </View>
-          <Text style={s.stepLabel}>Step 2 of 2</Text>
+          <Text style={[s.stepLabel, { fontFamily: SF }]}>Step 2 of 2</Text>
 
           <Text style={[s.ageTitle, { fontSize: F.xl }]}>Who are you?</Text>
-          <Text style={[s.ageSub, { fontSize: F.sm }]}>
+          <Text style={[s.ageSub, { fontSize: F.sm, color: C.charcoal, fontFamily: SF }]}>
             This helps us personalize your campus experience.
           </Text>
 
@@ -361,7 +363,7 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
                   <Text style={[s.typeLabel, { fontSize: F.md }, selected === t.key && { color: C.maroon }]}>
                     {t.label}
                   </Text>
-                  <Text style={[s.typeDesc, { fontSize: F.xs }]}>{t.desc}</Text>
+                  <Text style={[s.typeDesc, { fontSize: F.xs, fontFamily: SF }]}>{t.desc}</Text>
                 </View>
                 <View style={[s.typeRadio, selected === t.key && s.typeRadioSelected]}>
                   {selected === t.key && <View style={s.typeRadioInner} />}
@@ -386,19 +388,18 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                 style={s.finishBtnGrad}
               >
-                <Text style={[s.finishBtnText, { fontSize: F.md }]}>
+                <Text style={[s.finishBtnText, { fontSize: F.md } ]}>
                   Finish
                 </Text>
-                <IconArrow size={16} color={selected ? C.white : C.gray} />
+                <IconArrow size={16} />
               </LinearGradient>
             </TouchableOpacity>
           </View>
 
-          <Text style={[s.hintText, { fontSize: F.xs, textAlign: 'center' }]}>
+          <Text style={[s.hintText, { fontSize: F.xs, textAlign: 'center', fontFamily: SF }]}>
             Please select your user type to continue
           </Text>
         </Animated.View>
-
       </ScrollView>
     </View>
   );
@@ -407,8 +408,9 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // NODE PICKER MODAL
 // ─────────────────────────────────────────────────────────────────────────────
-function NodePickerModal({ visible, title, onSelect, onClose, F }) {
+function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
   const [query, setQuery] = useState('');
+  const SF = subFont(ageRange);
 
   const filtered = query.trim().length === 0
     ? NODES
@@ -437,11 +439,11 @@ function NodePickerModal({ visible, title, onSelect, onClose, F }) {
         {/* Search */}
         <View style={nm.searchWrap}>
           <View style={nm.searchBox}>
-            <IconSearch size={16} color={C.gray} />
+            <IconSearch size={16} color={C.black} />
             <TextInput
-              style={[nm.searchInput, { fontSize: F.md }]}
+              style={[nm.searchInput, { fontSize: F.md, color: C.black }]}
               placeholder="Search by room name, number or building..."
-              placeholderTextColor={C.gray}
+              placeholderTextColor={C.black}
               value={query}
               onChangeText={setQuery}
               autoCorrect={false}
@@ -449,11 +451,11 @@ function NodePickerModal({ visible, title, onSelect, onClose, F }) {
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => setQuery('')} activeOpacity={0.7}>
-                <IconClose size={14} color={C.gray} />
+                <IconClose size={14} color={SC} />
               </TouchableOpacity>
             )}
           </View>
-          <Text style={[nm.resultCount, { fontSize: F.xs }]}>
+          <Text style={[nm.resultCount, { fontSize: F.xs, fontFamily: SF }]}>
             {filtered.length} location{filtered.length !== 1 ? 's' : ''} found
           </Text>
         </View>
@@ -486,7 +488,7 @@ function NodePickerModal({ visible, title, onSelect, onClose, F }) {
                     <Text style={[nm.nodeMetaText, { fontSize: F.xs }]}>{item.floor}</Text>
                   </View>
                   <Text style={[nm.nodeMetaSep, { fontSize: F.xs }]}>·</Text>
-                  <Text style={[nm.nodeBuilding, { fontSize: F.xs }]} numberOfLines={1}>
+                  <Text style={[nm.nodeBuilding, { fontSize: F.xs, fontFamily: SF }]} numberOfLines={1}>
                     {item.building}
                   </Text>
                 </View>
@@ -514,13 +516,13 @@ function NodePickerModal({ visible, title, onSelect, onClose, F }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // SETTINGS MODAL
 // ─────────────────────────────────────────────────────────────────────────────
-function SettingsModal({ visible, onClose, F }) {
+function SettingsModal({ visible, onClose, F, ageRange }) {
   const [hdQuality,    setHdQuality]    = useState(false);
   const [forceOffline, setForceOffline] = useState(false);
   const [autoSync,     setAutoSync]     = useState(true);
   const [wifiOnly,     setWifiOnly]     = useState(false);
+  const SF = subFont(ageRange);
 
-  // Track if any change was made from defaults
   const [initial] = useState({ hdQuality: false, forceOffline: false, autoSync: true, wifiOnly: false });
   const hasChanges =
     hdQuality    !== initial.hdQuality    ||
@@ -550,7 +552,7 @@ function SettingsModal({ visible, onClose, F }) {
           {/* ── 360° Image Quality ──────────────────────────────────────── */}
           <View style={sm.section}>
             <Text style={[sm.sectionTitle, { fontSize: F.sm }]}>360° Image Quality</Text>
-            <Text style={[sm.sectionDesc, { fontSize: F.xs }]}>
+            <Text style={[sm.sectionDesc, { fontSize: F.xs, fontFamily: SF }]}>
               HD provides sharper panoramic views but uses more data.
             </Text>
             <View style={sm.toggleRow}>
@@ -588,7 +590,7 @@ function SettingsModal({ visible, onClose, F }) {
             <View style={sm.settingRow}>
               <View style={{ flex: 1 }}>
                 <Text style={[sm.settingLabel, { fontSize: F.md }]}>Force Offline Mode</Text>
-                <Text style={[sm.settingDesc, { fontSize: F.xs }]}>
+                <Text style={[sm.settingDesc, { fontSize: F.xs, fontFamily: SF }]}>
                   Use only downloaded map data, no internet required.
                 </Text>
               </View>
@@ -607,7 +609,7 @@ function SettingsModal({ visible, onClose, F }) {
           {/* ── Offline Resources ───────────────────────────────────────── */}
           <View style={sm.section}>
             <Text style={[sm.sectionTitle, { fontSize: F.sm }]}>Offline Resources</Text>
-            <Text style={[sm.sectionDesc, { fontSize: F.xs }]}>
+            <Text style={[sm.sectionDesc, { fontSize: F.xs, fontFamily: SF }]}>
               Manage how map data is downloaded and stored on your device.
             </Text>
 
@@ -615,7 +617,7 @@ function SettingsModal({ visible, onClose, F }) {
             <View style={[sm.settingRow, { marginTop: 14 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[sm.settingLabel, { fontSize: F.md }]}>Auto-sync</Text>
-                <Text style={[sm.settingDesc, { fontSize: F.xs }]}>
+                <Text style={[sm.settingDesc, { fontSize: F.xs, fontFamily: SF }]}>
                   Automatically update map data in the background.
                 </Text>
               </View>
@@ -632,7 +634,7 @@ function SettingsModal({ visible, onClose, F }) {
             <View style={[sm.settingRow, { marginTop: 14 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[sm.settingLabel, { fontSize: F.md }]}>Wi-Fi Only</Text>
-                <Text style={[sm.settingDesc, { fontSize: F.xs }]}>
+                <Text style={[sm.settingDesc, { fontSize: F.xs, fontFamily: SF }]}>
                   Only sync and download when connected to Wi-Fi.
                 </Text>
               </View>
@@ -671,7 +673,7 @@ function SettingsModal({ visible, onClose, F }) {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={sm.applyBtnGrad}
             >
-              <Text style={[sm.applyBtnText, { fontSize: F.md }, !hasChanges && { color: C.gray }]}>
+              <Text style={[sm.applyBtnText, { fontSize: F.md }]}>
                 Apply Changes
               </Text>
             </LinearGradient>
@@ -686,18 +688,19 @@ function SettingsModal({ visible, onClose, F }) {
 // SCREEN 3 — Home Screen
 // ─────────────────────────────────────────────────────────────────────────────
 function HomeScreen({ ageRange, userType, onBack }) {
-  const F = FONT_SCALE[ageRange];
-  const [startNode,      setStartNode]      = useState(null);
-  const [destNode,       setDestNode]       = useState(null);
+  const F  = FONT_SCALE[ageRange];
+  const SF = subFont(ageRange);
+  const [startNode,       setStartNode]       = useState(null);
+  const [destNode,        setDestNode]        = useState(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showDestPicker,  setShowDestPicker]  = useState(false);
-  const [showSettings,   setShowSettings]    = useState(false);
-  const [startLayout, setStartLayout] = useState(null);
-  const [destLayout,  setDestLayout]  = useState(null);
+  const [showSettings,    setShowSettings]    = useState(false);
+  const [startLayout,     setStartLayout]     = useState(null);
+  const [destLayout,      setDestLayout]      = useState(null);
 
   const canFind = startNode && destNode;
 
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(20)).current;
   const btnScale  = useRef(new Animated.Value(1)).current;
 
@@ -786,7 +789,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
             <Text style={[h.compassDir, { left: 10 }]}>W</Text>
           </View>
 
-          <Text style={[h.heroSub, { fontSize: 14 }]}>
+          <Text style={[h.heroSub, { fontSize: 14, fontFamily: SF }]}>
             Enter your starting point and destination{'\n'}to find the best path on campus.
           </Text>
 
@@ -801,7 +804,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
             </View>
 
             {/* Starting Point button */}
-            <View 
+            <View
               style={h.inputRow}
               onLayout={e => setStartLayout(e.nativeEvent.layout)}
             >
@@ -814,19 +817,19 @@ function HomeScreen({ ageRange, userType, onBack }) {
                 activeOpacity={0.8}
               >
                 <View style={h.inputBtnInner}>
-                  <Text style={[h.inputBtnLabel, { fontSize: F.xs }]}>Starting Point</Text>
+                  <Text style={[h.inputBtnLabel, { fontSize: F.sm }]}>Starting Point</Text>
                   <Text
                     style={[
                       h.inputBtnValue,
-                      { fontSize: F.md },
-                      !startNode && h.inputBtnPlaceholder,
+                      { fontSize: F.xs },
+                      !startNode && [h.inputBtnPlaceholder, { fontFamily: SF }],
                     ]}
                     numberOfLines={1}
                   >
                     {startNode ? startNode.room : 'Where are you now?'}
                   </Text>
                   {startNode && (
-                    <Text style={[h.inputBtnBuilding, { fontSize: F.xs }]} numberOfLines={1}>
+                    <Text style={[h.inputBtnBuilding, { fontSize: F.sm, fontFamily: SF }]} numberOfLines={1}>
                       {startNode.floor} · {startNode.building}
                     </Text>
                   )}
@@ -873,7 +876,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
             </View>
 
             {/* Destination Point button */}
-            <View 
+            <View
               style={h.inputRow}
               onLayout={e => setDestLayout(e.nativeEvent.layout)}
             >
@@ -890,15 +893,15 @@ function HomeScreen({ ageRange, userType, onBack }) {
                   <Text
                     style={[
                       h.inputBtnValue,
-                      { fontSize: F.md },
-                      !destNode && h.inputBtnPlaceholder,
+                      { fontSize: F.xs },
+                      !destNode && [h.inputBtnPlaceholder, { fontFamily: SF }],
                     ]}
                     numberOfLines={1}
                   >
-                    {destNode ? destNode.room : 'Where do you want to go?'}
+                    {destNode ? destNode.room : 'I want to go to?'}
                   </Text>
                   {destNode && (
-                    <Text style={[h.inputBtnBuilding, { fontSize: F.xs }]} numberOfLines={1}>
+                    <Text style={[h.inputBtnBuilding, { fontSize: F.xs, fontFamily: SF }]} numberOfLines={1}>
                       {destNode.floor} · {destNode.building}
                     </Text>
                   )}
@@ -907,7 +910,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
             </View>
 
             {/* Hint */}
-            <Text style={[h.hintTxt, { fontSize: F.xs }]}>
+            <Text style={[h.hintTxt, { fontSize: F.xs, fontFamily: SF }]}>
               {canFind
                 ? '✓  Route ready — tap Find Path to navigate'
                 : 'Tap a field above to select a location'}
@@ -924,7 +927,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
                   start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                   style={[h.findBtn, { height: 50 + (F.md - 12.5) * 1.5 }]}
                 >
-                  <Text style={[h.findBtnText, { fontSize: F.md }, !canFind && { color: C.gray }]}>
+                  <Text style={[h.findBtnText, { fontSize: F.md }]}>
                     Find Path
                   </Text>
                   <View style={[h.findBtnIcon, !canFind && h.findBtnIconOff]}>
@@ -945,6 +948,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
         onSelect={(node) => { setStartNode(node); setShowStartPicker(false); }}
         onClose={() => setShowStartPicker(false)}
         F={F}
+        ageRange={ageRange}
       />
       <NodePickerModal
         visible={showDestPicker}
@@ -952,11 +956,13 @@ function HomeScreen({ ageRange, userType, onBack }) {
         onSelect={(node) => { setDestNode(node); setShowDestPicker(false); }}
         onClose={() => setShowDestPicker(false)}
         F={F}
+        ageRange={ageRange}
       />
       <SettingsModal
         visible={showSettings}
         onClose={() => setShowSettings(false)}
         F={F}
+        ageRange={ageRange}
       />
     </View>
   );
@@ -966,9 +972,9 @@ function HomeScreen({ ageRange, userType, onBack }) {
 // ROOT — Navigation controller
 // ─────────────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [screen,    setScreen]    = useState('age');   // 'age' | 'type' | 'home'
-  const [ageRange,  setAgeRange]  = useState(null);
-  const [userType,  setUserType]  = useState(null);
+  const [screen,   setScreen]   = useState('age');
+  const [ageRange, setAgeRange] = useState(null);
+  const [userType, setUserType] = useState(null);
 
   const [fontsLoaded] = useFonts({
     Montserrat_400Regular,
@@ -1048,11 +1054,11 @@ const s = StyleSheet.create({
 
   ageTitle: {
     fontFamily: 'CormorantGaramond_700Bold', fontSize: 31,
-    color: C.maroon, letterSpacing: 0.3, lineHeight: 32, marginBottom: 6,
+    color: C.maroon, letterSpacing: 0.3, lineHeight: 40, marginBottom: 6,
   },
   ageSub: {
     fontFamily: 'Montserrat_400Regular', fontSize: 13,
-    color: C.grayMid, lineHeight: 17, letterSpacing: 0.2, marginBottom: 24,
+    color: C.charcoal, lineHeight: 17, letterSpacing: 0.2, marginBottom: 24,
   },
 
   ageOptions: { flexDirection: 'row', gap: 10, marginBottom: 24 },
@@ -1066,13 +1072,14 @@ const s = StyleSheet.create({
   ageCardSelected: { borderColor: C.maroon},
   ageEmoji:        { fontSize: 26 },
   ageLabel: {
-    fontFamily: 'Montserrat_700Bold', fontSize: 16.5,
+    fontFamily: 'Montserrat_700Bold', fontSize: 20,
     color: C.black, letterSpacing: 0.3,
   },
   ageLabelSelected: { color: C.maroon },
   ageSublabel: {
-    fontFamily: 'Montserrat_400Regular', fontSize: 10,
-    color: C.gray, letterSpacing: 0.3,
+    fontFamily: 'Montserrat_700Bold', fontSize: 11,
+    color: C.black, letterSpacing: 0.3,
+    textAlign: 'center',
   },
   ageCheckDot: {
     width: 8, height: 8, borderRadius: 4,
@@ -1090,8 +1097,8 @@ const s = StyleSheet.create({
     color: C.white, letterSpacing: 3, textTransform: 'uppercase',
   },
   hintText: {
-    fontFamily: 'Montserrat_400Regular', fontSize: 12,
-    color: C.gray, textAlign: 'center', marginTop: 10, letterSpacing: 0.3,
+    fontFamily: 'Montserrat_700Bold', fontSize: 12,
+    color: C.black, textAlign: 'center', marginTop: 10, letterSpacing: 0.3,
   },
 
   typeList: { gap: 8, marginBottom: 20 },
@@ -1107,11 +1114,11 @@ const s = StyleSheet.create({
   typeEmoji: { fontSize: 24, flexShrink: 0 },
   typeLabel: {
     fontFamily: 'Montserrat_600SemiBold', fontSize: 13.5,
-    color: C.black, letterSpacing: 0.2, lineHeight: 18,
+    color: C.black, letterSpacing: 0.2, lineHeight: 18, alignItems: 'center',
   },
   typeDesc: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
-    color: C.gray, letterSpacing: 0.2, marginTop: 2,
+    color: C.black, letterSpacing: 0.2, marginTop: 2,
   },
   typeRadio: {
     width: 22, height: 22, borderRadius: 11,
@@ -1182,7 +1189,7 @@ const nm = StyleSheet.create({
   },
   resultCount: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10,
-    color: C.gray, marginTop: 8, marginLeft: 2, letterSpacing: 0.3,
+    color: C.charcoal, marginTop: 8, marginLeft: 2, letterSpacing: 0.3,
   },
   listContent: { paddingHorizontal: 16, paddingBottom: 24 },
   nodeItem: {
@@ -1214,7 +1221,7 @@ const nm = StyleSheet.create({
   nodeMetaSep: { color: C.grayLight, fontSize: 10 },
   nodeBuilding: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
-    color: C.grayMid, flex: 1, letterSpacing: 0.2,
+    color: C.charcoal, flex: 1, letterSpacing: 0.2,
   },
   eyeBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -1255,7 +1262,7 @@ const sm = StyleSheet.create({
   },
   sectionDesc: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
-    color: C.gray, lineHeight: 15, letterSpacing: 0.2, marginBottom: 12,
+    color: C.charcoal, lineHeight: 18, letterSpacing: 0.2, marginBottom: 12,
   },
   divider: { height: 1, backgroundColor: C.grayLight, marginVertical: 16 },
   toggleRow: { flexDirection: 'row', gap: 10 },
@@ -1283,7 +1290,7 @@ const sm = StyleSheet.create({
   },
   settingDesc: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
-    color: C.gray, lineHeight: 15, letterSpacing: 0.2, marginTop: 2,
+    color: C.charcoal, lineHeight: 18, letterSpacing: 0.2, marginTop: 2,
   },
   downloadBtn: {
     borderRadius: 12, overflow: 'hidden', marginTop: 16,
@@ -1394,7 +1401,7 @@ const h = StyleSheet.create({
   },
   heroSub: {
     fontFamily: 'Montserrat_400Regular', fontSize: 11,
-    color: C.grayMid, textAlign: 'center',
+    color: C.charcoal, textAlign: 'center',
     lineHeight: 17, letterSpacing: 0.2, marginBottom: 22,
   },
 
@@ -1421,7 +1428,6 @@ const h = StyleSheet.create({
   connectorDotGold: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold, marginBottom: 2,
   },
-
   connectorDotMaroon: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.maroonLight, marginTop: 2,
   },
@@ -1439,20 +1445,21 @@ const h = StyleSheet.create({
     flex: 1, minHeight: 56, borderRadius: 12,
     borderWidth: 1.5, borderColor: C.grayLight,
     backgroundColor: C.grayFaint, paddingHorizontal: 14, justifyContent: 'center',
+    paddingVertical: 10,
   },
   inputBtnFilled: {
     borderColor: C.maroonBorder, backgroundColor: C.maroonFaint,
   },
   inputBtnInner: { gap: 2 },
   inputBtnLabel: {
-    fontFamily: 'Montserrat_600SemiBold', fontSize: 8.5,
-    color: C.gray, letterSpacing: 1.8, textTransform: 'uppercase',
+    fontFamily: 'Montserrat_700Bold', fontSize: 8.5,
+    color: C.black, letterSpacing: 1.8, textTransform: 'uppercase',
   },
   inputBtnValue: {
     fontFamily: 'Montserrat_600SemiBold', fontSize: 13.5,
     color: C.black, letterSpacing: 0.2,
   },
-  inputBtnPlaceholder: { color: C.gray, fontFamily: 'Montserrat_400Regular' },
+  inputBtnPlaceholder: { color: C.black, fontFamily: 'Montserrat_400Regular' },
   inputBtnBuilding: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10,
     color: C.grayMid, letterSpacing: 0.2,
@@ -1473,7 +1480,7 @@ const h = StyleSheet.create({
 
   hintTxt: {
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
-    color: C.gray, textAlign: 'center',
+    color: C.charcoal, textAlign: 'center',
     marginTop: 12, marginBottom: 4, letterSpacing: 0.2,
   },
 
