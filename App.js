@@ -345,9 +345,9 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
           </View>
           <Text style={[s.stepLabel, { fontFamily: SF }]}>Step 2 of 2</Text>
 
-          <Text style={[s.ageTitle, { fontSize: F.xl }]}>Who are you?</Text>
-          <Text style={[s.ageSub, { fontSize: F.sm, color: C.charcoal, fontFamily: SF }]}>
-            This helps us personalize your campus experience.
+          <Text style={[s.ageTitle, { fontSize: F.xxl }]}>Who are you?</Text>
+          <Text style={[s.ageSub, { fontSize: F.sm, color: C.charcoal }]}>
+            Tell us your role to personalize your experience!
           </Text>
 
           <View style={s.typeList}>
@@ -1057,8 +1057,8 @@ const s = StyleSheet.create({
     color: C.maroon, letterSpacing: 0.3, lineHeight: 40, marginBottom: 6,
   },
   ageSub: {
-    fontFamily: 'Montserrat_400Regular', fontSize: 13,
-    color: C.charcoal, lineHeight: 17, letterSpacing: 0.2, marginBottom: 24,
+    fontFamily: 'Montserrat_400Regular', fontSize: 15,
+    color: C.charcoal, lineHeight: 20, letterSpacing: 0.2, marginBottom: 24,
   },
 
   ageOptions: { flexDirection: 'row', gap: 10, marginBottom: 24 },
