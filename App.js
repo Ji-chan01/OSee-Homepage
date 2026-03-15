@@ -451,7 +451,7 @@ function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
             />
             {query.length > 0 && (
               <TouchableOpacity onPress={() => setQuery('')} activeOpacity={0.7}>
-                <IconClose size={14} color={SC} />
+                <IconClose size={14} />
               </TouchableOpacity>
             )}
           </View>
@@ -765,6 +765,12 @@ function HomeScreen({ ageRange, userType, onBack }) {
 
       {/* ── BODY ──────────────────────────────────────────────────────────── */}
       <View style={h.body}>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ flexGrow: 1 }}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
         <Animated.View style={[h.bodyInner, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
 
           {/* Greeting chip */}
@@ -939,6 +945,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
 
           </View>
         </Animated.View>
+        </ScrollView>
       </View>
 
       {/* Modals */}
@@ -1352,7 +1359,7 @@ const h = StyleSheet.create({
   },
 
   body: { flex: 1, backgroundColor: C.white },
-  bodyInner: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
+  bodyInner: { flex: 1, paddingHorizontal: 20, paddingTop: 20, paddingBottom: 20 },
 
   greetRow: { alignItems: 'flex-start', marginBottom: 16 },
   greetChip: {
