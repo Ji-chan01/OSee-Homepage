@@ -1228,7 +1228,7 @@ const sm = StyleSheet.create({
     fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
     color: C.gray, lineHeight: 15, letterSpacing: 0.2, marginBottom: 12,
   },
-  divider: { height: 1, backgroundColor: C.grayFaint, marginVertical: 16 },
+  divider: { height: 1, backgroundColor: C.grayLight, marginVertical: 16 },
   toggleRow: { flexDirection: 'row', gap: 10 },
   qualityBtn: {
     flex: 1, borderRadius: 12, borderWidth: 1.5,
