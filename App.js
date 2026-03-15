@@ -1021,11 +1021,11 @@ const s = StyleSheet.create({
   },
 
   ageTitle: {
-    fontFamily: 'CormorantGaramond_700Bold', fontSize: 28,
+    fontFamily: 'CormorantGaramond_700Bold', fontSize: 31,
     color: C.maroon, letterSpacing: 0.3, lineHeight: 32, marginBottom: 6,
   },
   ageSub: {
-    fontFamily: 'Montserrat_400Regular', fontSize: 14.5,
+    fontFamily: 'Montserrat_400Regular', fontSize: 13,
     color: C.grayMid, lineHeight: 17, letterSpacing: 0.2, marginBottom: 24,
   },
 
