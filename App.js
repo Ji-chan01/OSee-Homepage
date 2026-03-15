@@ -191,7 +191,7 @@ function AgeSelectionScreen({ onNext }) {
 
   const ages = [
     { key: 'Classic', label: 'Classic',  sub: 'A balanced, standard display',  emoji: '⚖️' },
-    { key: 'Enhanced',   label: 'Enhanced', sub: 'Larger text and bolder contrast for easier reading.', emoji: '🔍' },
+    { key: 'Enhanced',   label: 'Enhanced', sub: 'Larger text and bolder contrast for easier reading', emoji: '🔍' },
   ];
 
   // Age selection screen has no ageRange yet — use default C.gray
