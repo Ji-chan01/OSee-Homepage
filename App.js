@@ -1064,7 +1064,7 @@ const s = StyleSheet.create({
     color: C.white, letterSpacing: 3, textTransform: 'uppercase',
   },
   hintText: {
-    fontFamily: 'Montserrat_400Regular', fontSize: 10.5,
+    fontFamily: 'Montserrat_400Regular', fontSize: 12,
     color: C.gray, textAlign: 'center', marginTop: 10, letterSpacing: 0.3,
   },
 
