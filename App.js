@@ -58,9 +58,9 @@ const { width: SW, height: SH } = Dimensions.get('window');
 
 // ─── Font size scales per age range ──────────────────────────────────────────
 const FONT_SCALE = {
-  '18-30': { xs: 9,  sm: 10.5, md: 12.5, lg: 15,  xl: 18,  xxl: 24, hero: 30 },
-  '30-40': { xs: 11, sm: 12.5, md: 14.5, lg: 17,  xl: 21,  xxl: 27, hero: 34 },
-  '40+':   { xs: 13, sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
+  '18-30': { xs: 13,  sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
+  '30-40': { xs: 14, sm: 15.5, md: 17.5, lg: 21,  xl: 25,  xxl: 27, hero: 40 },
+  '40+':   { xs: 15, sm: 16.5, md: 18.5, lg: 22,  xl: 26,  xxl: 33, hero: 41 },
 };
 
 // ─── Sample nodes data ────────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
     { key: 'student',  label: 'Student',          emoji: '📚', desc: 'Currently enrolled student' },
     { key: 'teacher',  label: 'Teacher',           emoji: '🏫', desc: 'Faculty member / instructor' },
     { key: 'faculty',  label: 'Faculty / Staff',   emoji: '🏛️', desc: 'Non-teaching staff member'  },
-    { key: 'guest',    label: 'Guest',             emoji: '🤝', desc: 'Invited guest or visitor'    },
+    { key: 'guest',    label: 'Guest',             emoji: '🤝', desc: 'Invited guest'    },
     { key: 'visitor',  label: 'Visitor',           emoji: '👤', desc: 'Walk-in campus visitor'      },
   ];
 
@@ -692,6 +692,8 @@ function HomeScreen({ ageRange, userType, onBack }) {
   const [showStartPicker, setShowStartPicker] = useState(false);
   const [showDestPicker,  setShowDestPicker]  = useState(false);
   const [showSettings,   setShowSettings]    = useState(false);
+  const [startLayout, setStartLayout] = useState(null);
+  const [destLayout,  setDestLayout]  = useState(null);
 
   const canFind = startNode && destNode;
 
@@ -784,8 +786,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
             <Text style={[h.compassDir, { left: 10 }]}>W</Text>
           </View>
 
-          <Text style={[h.heroTitle, { fontSize: F.xxl }]}>Campus Navigator</Text>
-          <Text style={[h.heroSub, { fontSize: F.sm }]}>
+          <Text style={[h.heroSub, { fontSize: 14 }]}>
             Enter your starting point and destination{'\n'}to find the best path on campus.
           </Text>
 
@@ -799,15 +800,11 @@ function HomeScreen({ ageRange, userType, onBack }) {
               <View style={h.cardLabelLine} />
             </View>
 
-            {/* Connector dots */}
-            <View style={h.connector} pointerEvents="none">
-              <View style={h.connectorDotGold} />
-              <View style={h.connectorLine} />
-              <View style={h.connectorDotMaroon} />
-            </View>
-
             {/* Starting Point button */}
-            <View style={h.inputRow}>
+            <View 
+              style={h.inputRow}
+              onLayout={e => setStartLayout(e.nativeEvent.layout)}
+            >
               <View style={h.inputIconCircle}>
                 <IconPin size={17} color={C.gold} />
               </View>
@@ -837,6 +834,35 @@ function HomeScreen({ ageRange, userType, onBack }) {
               </TouchableOpacity>
             </View>
 
+            {/* Dynamic Connector */}
+            {startLayout && destLayout && (() => {
+              const startCenterY = startLayout.y + startLayout.height / 2;
+              const destCenterY  = destLayout.y  + destLayout.height  / 2;
+              const iconHalf = 30;
+              const top    = startCenterY + iconHalf;
+              const height = destCenterY - startCenterY - iconHalf * 2;
+              const left   = 18 + 22 - 1;
+
+              return (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: 'absolute',
+                    left,
+                    top,
+                    height,
+                    width: 2,
+                    alignItems: 'center',
+                    zIndex: 0,
+                  }}
+                >
+                  <View style={h.connectorDotGold} />
+                  <View style={{ flex: 1, width: 1.5, backgroundColor: C.grayLight }} />
+                  <View style={h.connectorDotMaroon} />
+                </View>
+              );
+            })()}
+
             {/* Swap row */}
             <View style={h.swapRow}>
               <View style={h.swapLine} />
@@ -847,7 +873,10 @@ function HomeScreen({ ageRange, userType, onBack }) {
             </View>
 
             {/* Destination Point button */}
-            <View style={h.inputRow}>
+            <View 
+              style={h.inputRow}
+              onLayout={e => setDestLayout(e.nativeEvent.layout)}
+            >
               <View style={[h.inputIconCircle, h.inputIconCircleDest]}>
                 <IconFlag size={17} color={C.maroonLight} />
               </View>
@@ -1108,7 +1137,7 @@ const s = StyleSheet.create({
   finishBtn: { flex: 1, borderRadius: 14, overflow: 'hidden' },
   finishBtnOff: { backgroundColor: C.grayFaint, borderWidth: 1, borderColor: C.grayLight },
   finishBtnGrad: {
-    height: 52, flexDirection: 'row', alignItems: 'center',
+    height: 57, flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 10,
   },
   finishBtnText: {
@@ -1389,13 +1418,10 @@ const h = StyleSheet.create({
   },
   cardLabelLine: { flex: 1, height: 1, backgroundColor: C.grayLight },
 
-  connector: {
-    position: 'absolute', left: 37, top: 113, width: 2, alignItems: 'center', zIndex: 0,
-  },
   connectorDotGold: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold, marginBottom: 2,
   },
-  connectorLine: { flex: 1, width: 1.5, backgroundColor: C.grayLight, alignSelf: 'center', marginVertical: 4, height: 20 },
+
   connectorDotMaroon: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.maroonLight, marginTop: 2,
   },
