@@ -192,8 +192,8 @@ function AgeSelectionScreen({ onNext }) {
     { key: '30-40', label: '30 – 40',  sub: 'Professional', emoji: '💼' },
     { key: '40+',   label: '40 +',     sub: 'Senior',       emoji: '🌟' },
   ];
-
   return (
+    
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
 
@@ -201,7 +201,16 @@ function AgeSelectionScreen({ onNext }) {
       <LinearGradient colors={[C.maroonDark, C.maroon]} style={s.topBand}>
         <View style={s.logoRow}>
           <View style={s.logoRing}><Text style={s.logoLetter}>O</Text></View>
-          <Text style={s.logoTitle}>O SEE</Text>
+          <View style={s.headerCenter}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+              <Text style={s.logoTitle}>O</Text>
+              <Text style={[s.logoTitle, { marginLeft: 3 }]}>SEE</Text>
+            </View>
+            <Text style={[h.headerSub, { fontSize: 9, marginLeft: 3 }]}>
+              Campus Navigator
+            </Text>
+          </View>
+          
         </View>
       </LinearGradient>
       <View style={s.topAccent} />
@@ -303,7 +312,15 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
       <LinearGradient colors={[C.maroonDark, C.maroon]} style={s.topBand}>
         <View style={s.logoRow}>
           <View style={s.logoRing}><Text style={s.logoLetter}>O</Text></View>
-          <Text style={s.logoTitle}>O SEE</Text>
+          <View style={s.headerCenter}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+              <Text style={s.logoTitle}>O</Text>
+              <Text style={[s.logoTitle, { marginLeft: 3 }]}>SEE</Text>
+            </View>
+            <Text style={[h.headerSub, { fontSize: 9, marginLeft: 3 }]}>
+              Campus Navigator
+            </Text>
+          </View>
         </View>
       </LinearGradient>
       <View style={s.topAccent} />
@@ -412,7 +429,7 @@ function NodePickerModal({ visible, title, onSelect, onClose, F }) {
           <TouchableOpacity style={nm.closeBtn} onPress={() => { setQuery(''); onClose(); }} activeOpacity={0.75}>
             <IconClose size={20} color={C.white} />
           </TouchableOpacity>
-          <Text style={[nm.headerTitle, { fontSize: F.lg }]}>{title}</Text>
+          <Text style={[nm.headerTitle, { fontSize: 24 }]}>{title}</Text>
           <View style={{ width: 36 }} />
         </LinearGradient>
         <View style={nm.headerAccent} />
@@ -522,7 +539,7 @@ function SettingsModal({ visible, onClose, F }) {
           <TouchableOpacity style={sm.closeBtn} onPress={onClose} activeOpacity={0.75}>
             <IconClose size={20} color={C.white} />
           </TouchableOpacity>
-          <Text style={[sm.headerTitle, { fontSize: F.lg }]}>Settings</Text>
+          <Text style={[sm.headerTitle, { fontSize: 24 }]}>Settings</Text>
           <View style={{ width: 36 }} />
         </LinearGradient>
         <View style={sm.headerAccent} />
@@ -727,8 +744,8 @@ function HomeScreen({ ageRange, userType, onBack }) {
 
           {/* Title */}
           <View style={h.headerCenter}>
-            <Text style={[h.headerTitle, { fontSize: F.xl }]}>Find Your Way</Text>
-            <Text style={[h.headerSub, { fontSize: F.xs }]}>Osmena Colleges</Text>
+            <Text style={[h.headerTitle, { fontSize: 24 }]}>Find Your Way</Text>
+            <Text style={[h.headerSub, { fontSize: 9 }]}>OSMEÑA COLLEGES</Text>
           </View>
 
           {/* Reload */}
@@ -1295,7 +1312,7 @@ const h = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.07)',
   },
-  headerCenter: { flex: 1, alignItems: 'center' },
+  headerCenter: { flex: 1, marginLeft: 12, alignItems: 'flex-start' },
   headerTitle: {
     fontFamily: 'CormorantGaramond_700Bold', fontSize: 20,
     color: C.white, letterSpacing: 0.3, lineHeight: 23,
