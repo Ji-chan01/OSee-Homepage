@@ -662,7 +662,7 @@ function SettingsModal({ visible, onClose, F }) {
         {/* Apply button */}
         <View style={sm.applyWrap}>
           <TouchableOpacity
-            style={[sm.applyBtn, !hasChanges && sm.applyBtnOff]}
+            style={[sm.applyBtn]}
             onPress={() => hasChanges && onClose()}
             activeOpacity={hasChanges ? 0.85 : 1}
           >
@@ -676,9 +676,6 @@ function SettingsModal({ visible, onClose, F }) {
               </Text>
             </LinearGradient>
           </TouchableOpacity>
-          <Text style={[sm.applyHint, { fontSize: F.xs }]}>
-            {hasChanges ? ' ' : 'Make changes above to enable Apply'}
-          </Text>
         </View>
       </View>
     </Modal>
