@@ -1393,12 +1393,12 @@ const h = StyleSheet.create({
   cardLabelLine: { flex: 1, height: 1, backgroundColor: C.grayLight },
 
   connector: {
-    position: 'absolute', left: 35, top: 88, width: 2, alignItems: 'center', zIndex: 0,
+    position: 'absolute', left: 37, top: 113, width: 2, alignItems: 'center', zIndex: 0,
   },
   connectorDotGold: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.gold, marginBottom: 2,
   },
-  connectorLine: { flex: 1, width: 1.5, backgroundColor: C.grayLight, height: 52 },
+  connectorLine: { flex: 1, width: 1.5, backgroundColor: C.grayLight, alignSelf: 'center', marginVertical: 4, height: 20 },
   connectorDotMaroon: {
     width: 8, height: 8, borderRadius: 4, backgroundColor: C.maroonLight, marginTop: 2,
   },
@@ -1410,7 +1410,7 @@ const h = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   inputIconCircleDest: {
-    backgroundColor: C.maroonFaint, borderColor: C.maroonBorder,
+    backgroundColor: C.maroonFaint, borderColor: C.maroonBorder
   },
   inputBtn: {
     flex: 1, minHeight: 56, borderRadius: 12,
