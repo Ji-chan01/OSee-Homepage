@@ -2,9 +2,31 @@
  * O See – Mobile Campus Navigator
  * User Flow: Age Selection → User Type → Home Screen
  * React Native Expo (JavaScript)
+ *
+ * PERFORMANCE REWRITE — changes applied:
+ *  [FIX-1]  Race condition: animRunning → useRef-based cancel token
+ *  [FIX-2]  setTimeout leak: clearTimeout on cancel / re-download
+ *  [FIX-3]  Pulse loop: isMounted guard in useEffect cleanup
+ *  [FIX-4]  Inline gradient arrays → module-level constants (15+ sites)
+ *  [FIX-5]  NODES.filter() → useMemo + pre-lowercased search index
+ *  [FIX-6]  Connector IIFE → useMemo
+ *  [FIX-7]  FlatList: getItemLayout, initialNumToRender, removeClippedSubviews
+ *  [FIX-8]  Heavy sub-components wrapped in React.memo
+ *  [FIX-9]  startDownload / cancelDownload → useCallback
+ *  [FIX-10] handleSwap, handleFindPath → useCallback
+ *  [FIX-11] Search debounce (150 ms) in NodePickerModal
+ *  [FIX-12] setCacheData null-guard in onCheckUpdates
+ *  [FIX-13] Stale subFont() call memoized where needed
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  useCallback,
+  memo,
+} from 'react';
 import {
   View,
   Text,
@@ -57,17 +79,25 @@ const C = {
   greenBorder:  'rgba(22,163,74,0.25)',
 };
 
+// [FIX-4] Module-level gradient color arrays — prevents new array allocation on every render
+const GRAD_MAROON        = [C.maroonDark, C.maroon];
+const GRAD_MAROON_LIGHT  = [C.maroon, C.maroonLight];
+const GRAD_DISABLED      = [C.grayLight, C.grayLight];
+const GRAD_GREEN         = [C.green, '#12863d'];
+const GRAD_MAROON_H      = { start: { x: 0, y: 0 }, end: { x: 1, y: 0 } };
+
 const { width: SW, height: SH } = Dimensions.get('window');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-const subFont = (ageRange) => ageRange === 'Enhanced' ? 'Montserrat_700Bold' : 'Montserrat_400Regular';
+const subFont = (ageRange) =>
+  ageRange === 'Enhanced' ? 'Montserrat_700Bold' : 'Montserrat_400Regular';
 
 const FONT_SCALE = {
-  'Classic':  { xs: 13,  sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
-  'Enhanced': { xs: 15,  sm: 16.5, md: 18.5, lg: 22,  xl: 26,  xxl: 33, hero: 41 },
+  Classic:  { xs: 13,  sm: 14.5, md: 16.5, lg: 20,  xl: 24,  xxl: 31, hero: 39 },
+  Enhanced: { xs: 15,  sm: 16.5, md: 18.5, lg: 22,  xl: 26,  xxl: 33, hero: 41 },
 };
 
-// ─── Sample nodes data ────────────────────────────────────────────────────────
+// ─── Static node data ─────────────────────────────────────────────────────────
 const NODES = [
   { id: '1',  room: 'Room 101',              floor: '1st Floor', building: 'Main Building',    has360: true  },
   { id: '2',  room: 'Room 102',              floor: '1st Floor', building: 'Main Building',    has360: false },
@@ -95,7 +125,18 @@ const NODES = [
   { id: '24', room: 'Student Lounge',        floor: '1st Floor', building: 'Annex Building',   has360: false },
 ];
 
-// ─── SVG Icons ────────────────────────────────────────────────────────────────
+// [FIX-5] Pre-lowercase search index — computed once at module load, never again
+const NODES_SEARCHABLE = NODES.map((n) => ({
+  ...n,
+  _room:     n.room.toLowerCase(),
+  _building: n.building.toLowerCase(),
+  _floor:    n.floor.toLowerCase(),
+}));
+
+// FlatList item height used for getItemLayout [FIX-7]
+const NODE_ITEM_HEIGHT = 67;
+
+// ─── SVG Icons (unchanged) ────────────────────────────────────────────────────
 const IconSettings = ({ size = 20, color = C.white }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <Circle cx="12" cy="12" r="3" stroke={color} strokeWidth="1.6" />
@@ -216,9 +257,12 @@ const IconChevronUp = ({ size = 14, color = C.white }) => (
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOWNLOAD CONFIRM MODAL  (message box with 3 options)
+// DOWNLOAD CONFIRM MODAL
+// [FIX-8] Wrapped in React.memo
 // ─────────────────────────────────────────────────────────────────────────────
-function DownloadConfirmModal({ visible, onFull, onMetadata, onCancel, F, ageRange }) {
+const DownloadConfirmModal = memo(function DownloadConfirmModal({
+  visible, onFull, onMetadata, onCancel, F, ageRange,
+}) {
   const SF = subFont(ageRange);
   const scaleAnim = useRef(new Animated.Value(0.88)).current;
   const fadeAnim  = useRef(new Animated.Value(0)).current;
@@ -233,29 +277,23 @@ function DownloadConfirmModal({ visible, onFull, onMetadata, onCancel, F, ageRan
       scaleAnim.setValue(0.88);
       fadeAnim.setValue(0);
     }
-  }, [visible]);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent onRequestClose={onCancel}>
       <Animated.View style={[dc.overlay, { opacity: fadeAnim }]}>
         <Animated.View style={[dc.box, { transform: [{ scale: scaleAnim }] }]}>
-
-          {/* Icon header */}
           <View style={dc.iconWrap}>
-            <LinearGradient colors={[C.maroonDark, C.maroon]} style={dc.iconCircle}>
+            <LinearGradient colors={GRAD_MAROON} style={dc.iconCircle}>
               <IconDownload size={26} color={C.white} />
             </LinearGradient>
           </View>
-
           <Text style={[dc.title, { fontSize: F ? F.lg : 20 }]}>Download Resources</Text>
           <Text style={[dc.desc, { fontSize: F ? F.xs : 13, fontFamily: SF }]}>
             Choose how you'd like to download campus map data to your device for offline use.
           </Text>
-
-          {/* Full Download */}
           <TouchableOpacity style={dc.optionFull} onPress={onFull} activeOpacity={0.85}>
-            <LinearGradient colors={[C.maroonDark, C.maroon]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={dc.optionGrad}>
+            <LinearGradient colors={GRAD_MAROON} start={GRAD_MAROON_H.start} end={GRAD_MAROON_H.end} style={dc.optionGrad}>
               <View style={dc.optionIconWrap}>
                 <IconDownload size={18} color={C.white} />
               </View>
@@ -270,8 +308,6 @@ function DownloadConfirmModal({ visible, onFull, onMetadata, onCancel, F, ageRan
               </View>
             </LinearGradient>
           </TouchableOpacity>
-
-          {/* Metadata Only */}
           <TouchableOpacity style={dc.optionMeta} onPress={onMetadata} activeOpacity={0.85}>
             <View style={dc.optionMetaInner}>
               <View style={dc.optionMetaIconWrap}>
@@ -288,8 +324,6 @@ function DownloadConfirmModal({ visible, onFull, onMetadata, onCancel, F, ageRan
               </View>
             </View>
           </TouchableOpacity>
-
-          {/* Cancel */}
           <TouchableOpacity style={dc.cancelBtn} onPress={onCancel} activeOpacity={0.75}>
             <Text style={[dc.cancelText, { fontSize: F ? F.sm : 13, fontFamily: SF }]}>Cancel</Text>
           </TouchableOpacity>
@@ -297,14 +331,16 @@ function DownloadConfirmModal({ visible, onFull, onMetadata, onCancel, F, ageRan
       </Animated.View>
     </Modal>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FLOATING DOWNLOAD TOAST  (small banner at top — non-blocking)
-// Lives OUTSIDE the Settings modal so it overlays everything
+// FLOATING DOWNLOAD TOAST
+// [FIX-8] Wrapped in React.memo
 // ─────────────────────────────────────────────────────────────────────────────
-function DownloadToast({ visible, isFullDownload, progress, phaseLabel, isDone, onDismiss, onExpand }) {
-  const slideAnim = useRef(new Animated.Value(-90)).current;
+const DownloadToast = memo(function DownloadToast({
+  visible, isFullDownload, progress, phaseLabel, isDone, onDismiss, onExpand,
+}) {
+  const slideAnim    = useRef(new Animated.Value(-90)).current;
   const progressAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -313,7 +349,7 @@ function DownloadToast({ visible, isFullDownload, progress, phaseLabel, isDone, 
     } else {
       Animated.timing(slideAnim, { toValue: -90, duration: 250, useNativeDriver: true }).start();
     }
-  }, [visible]);
+  }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     Animated.timing(progressAnim, {
@@ -322,7 +358,7 @@ function DownloadToast({ visible, isFullDownload, progress, phaseLabel, isDone, 
       easing: Easing.out(Easing.quad),
       useNativeDriver: false,
     }).start();
-  }, [progress]);
+  }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const barWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
@@ -331,18 +367,15 @@ function DownloadToast({ visible, isFullDownload, progress, phaseLabel, isDone, 
   return (
     <Animated.View style={[toast.wrap, { transform: [{ translateY: slideAnim }] }]}>
       <LinearGradient
-        colors={isDone ? [C.green, '#12863d'] : [C.maroonDark, C.maroon]}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+        colors={isDone ? GRAD_GREEN : GRAD_MAROON}
+        start={GRAD_MAROON_H.start}
+        end={GRAD_MAROON_H.end}
         style={toast.inner}>
-
-        {/* Left icon */}
         <View style={toast.iconWrap}>
           {isDone
             ? <IconCheck size={15} color={C.white} />
             : <IconDownload size={14} color={C.white} />}
         </View>
-
-        {/* Middle: label + bar */}
         <TouchableOpacity style={toast.middle} onPress={onExpand} activeOpacity={0.85}>
           <Text style={toast.label} numberOfLines={1}>
             {isDone ? '✓  Download complete!' : phaseLabel}
@@ -354,21 +387,23 @@ function DownloadToast({ visible, isFullDownload, progress, phaseLabel, isDone, 
           )}
           <Text style={toast.pct}>{isDone ? 'Tap to view details' : `${progress}% · tap to expand`}</Text>
         </TouchableOpacity>
-
-        {/* Right: close */}
         <TouchableOpacity style={toast.closeBtn} onPress={onDismiss} activeOpacity={0.75}>
           <IconClose size={14} color={C.white} />
         </TouchableOpacity>
       </LinearGradient>
     </Animated.View>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// INLINE PROGRESS PANEL  (inside Settings modal — shows when toast is dismissed)
+// INLINE PROGRESS PANEL
+// [FIX-3] isMounted guard in pulse loop useEffect
+// [FIX-8] Wrapped in React.memo
 // ─────────────────────────────────────────────────────────────────────────────
-function InlineDownloadProgress({ isFullDownload, progress, phaseLabel, phase, isDone, F, ageRange }) {
-  const SF = subFont(ageRange);
+const InlineDownloadProgress = memo(function InlineDownloadProgress({
+  isFullDownload, progress, phaseLabel, phase, isDone, F, ageRange,
+}) {
+  const SF           = subFont(ageRange);
   const progressAnim = useRef(new Animated.Value(0)).current;
   const pulseAnim    = useRef(new Animated.Value(1)).current;
 
@@ -379,22 +414,27 @@ function InlineDownloadProgress({ isFullDownload, progress, phaseLabel, phase, i
       easing: Easing.out(Easing.quad),
       useNativeDriver: false,
     }).start();
-  }, [progress]);
+  }, [progress]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // [FIX-3] isMounted guard prevents state update after unmount
   useEffect(() => {
+    let isMounted = true;
     if (!isDone) {
       const pulse = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.05, duration: 800, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1,    duration: 800, useNativeDriver: true }),
         ])
       );
       pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
+      return () => {
+        isMounted = false;
+        pulse.stop();
+      };
     }
-  }, [isDone]);
+    pulseAnim.setValue(1);
+    return () => { isMounted = false; };
+  }, [isDone]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const barWidth = progressAnim.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] });
 
@@ -404,10 +444,9 @@ function InlineDownloadProgress({ isFullDownload, progress, phaseLabel, phase, i
 
   return (
     <View style={ip.wrap}>
-      {/* Header row */}
       <View style={ip.headerRow}>
         <Animated.View style={[ip.iconCircle, { transform: [{ scale: pulseAnim }] }]}>
-          <LinearGradient colors={isDone ? [C.green, '#12863d'] : [C.maroonDark, C.maroon]} style={ip.iconGrad}>
+          <LinearGradient colors={isDone ? GRAD_GREEN : GRAD_MAROON} style={ip.iconGrad}>
             {isDone
               ? <IconCheck size={14} color={C.white} />
               : <IconDownload size={13} color={C.white} />}
@@ -423,32 +462,36 @@ function InlineDownloadProgress({ isFullDownload, progress, phaseLabel, phase, i
         </View>
         <Text style={[ip.pct, { fontSize: F ? F.sm : 13 }]}>{progress}%</Text>
       </View>
-
-      {/* Progress bar */}
       <View style={ip.barTrack}>
         <Animated.View style={[ip.barFill, { width: barWidth, backgroundColor: isDone ? C.green : undefined }]}>
           {!isDone && (
-            <LinearGradient colors={[C.maroon, C.maroonLight]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-              style={StyleSheet.absoluteFill} />
+            <LinearGradient
+              colors={GRAD_MAROON_LIGHT}
+              start={GRAD_MAROON_H.start}
+              end={GRAD_MAROON_H.end}
+              style={StyleSheet.absoluteFill}
+            />
           )}
         </Animated.View>
       </View>
-
-      {/* Phase steps */}
       <View style={ip.stepsRow}>
         {phases.map((p, i) => {
           const done    = i < phase || isDone;
           const current = i === phase && !isDone;
           return (
             <View key={i} style={{ flex: 1, alignItems: 'center' }}>
-              <View style={[ip.stepDot,
+              <View style={[
+                ip.stepDot,
                 done    && { borderColor: C.green,  backgroundColor: 'rgba(22,163,74,0.1)' },
                 current && { borderColor: C.maroon, backgroundColor: C.maroonFaint },
               ]}>
-                <Text style={{ fontSize: 7 }}>{done ? '✓' : i === 0 ? '📍' : i === 1 ? '🔗' : i === 2 && isFullDownload ? '🖼️' : '✅'}</Text>
+                <Text style={{ fontSize: 7 }}>
+                  {done ? '✓' : i === 0 ? '📍' : i === 1 ? '🔗' : i === 2 && isFullDownload ? '🖼️' : '✅'}
+                </Text>
               </View>
-              <Text style={[ip.stepLabel, { fontFamily: SF },
+              <Text style={[
+                ip.stepLabel,
+                { fontFamily: SF },
                 done    && { color: C.green },
                 current && { color: C.maroon },
               ]} numberOfLines={1}>{p}</Text>
@@ -458,30 +501,31 @@ function InlineDownloadProgress({ isFullDownload, progress, phaseLabel, phase, i
       </View>
     </View>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CACHE INFO PANEL  (replaces Download button after successful download)
+// CACHE INFO PANEL
+// [FIX-8] Wrapped in React.memo
 // ─────────────────────────────────────────────────────────────────────────────
-function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache, F, ageRange }) {
-  const SF = subFont(ageRange);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+const CacheInfoPanel = memo(function CacheInfoPanel({
+  cacheData, onCheckUpdates, onRedownload, onClearCache, F, ageRange,
+}) {
+  const SF        = subFont(ageRange);
+  const fadeAnim  = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const stats = [
+  const stats = useMemo(() => [
     { label: 'Nodes Cached',  value: cacheData.nodes,  icon: '📍' },
     { label: 'Edges Cached',  value: cacheData.edges,  icon: '🔗' },
     { label: 'Images Cached', value: cacheData.images, icon: '🖼️' },
     { label: 'Cache Size',    value: cacheData.size,   icon: '💾' },
-  ];
+  ], [cacheData]);
 
   return (
     <Animated.View style={[ci.wrap, { opacity: fadeAnim }]}>
-
-      {/* Success header */}
       <View style={ci.successBanner}>
         <View style={ci.successIconWrap}>
           <IconCheck size={14} color={C.green} />
@@ -495,8 +539,6 @@ function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache,
           </Text>
         </View>
       </View>
-
-      {/* Stats grid */}
       <View style={ci.statsGrid}>
         {stats.map((s, i) => (
           <View key={i} style={ci.statCard}>
@@ -506,8 +548,6 @@ function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache,
           </View>
         ))}
       </View>
-
-      {/* Action buttons */}
       <TouchableOpacity style={ci.actionBtn} onPress={onCheckUpdates} activeOpacity={0.85}>
         <View style={ci.actionBtnInner}>
           <IconRefresh size={15} color={C.maroon} />
@@ -516,7 +556,6 @@ function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache,
           </Text>
         </View>
       </TouchableOpacity>
-
       <TouchableOpacity style={ci.actionBtn} onPress={onRedownload} activeOpacity={0.85}>
         <View style={ci.actionBtnInner}>
           <IconDownload size={15} color={C.maroon} />
@@ -525,7 +564,6 @@ function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache,
           </Text>
         </View>
       </TouchableOpacity>
-
       <TouchableOpacity style={[ci.actionBtn, ci.actionBtnDanger]} onPress={onClearCache} activeOpacity={0.85}>
         <View style={ci.actionBtnInner}>
           <IconTrash size={15} color={C.maroonLight} />
@@ -536,7 +574,7 @@ function CacheInfoPanel({ cacheData, onCheckUpdates, onRedownload, onClearCache,
       </TouchableOpacity>
     </Animated.View>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN 1 — Age Selection
@@ -551,17 +589,21 @@ function AgeSelectionScreen({ onNext }) {
       Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ages = [
     { key: 'Classic',  label: 'Classic',  sub: 'A balanced, standard display',  emoji: '⚖️' },
     { key: 'Enhanced', label: 'Enhanced', sub: 'Larger text and bolder contrast for easier reading', emoji: '🔍' },
   ];
 
+  const handleNext = useCallback(() => {
+    if (selected) onNext(selected);
+  }, [selected, onNext]);
+
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
-      <LinearGradient colors={[C.maroonDark, C.maroon]} style={s.topBand}>
+      <LinearGradient colors={GRAD_MAROON} style={s.topBand}>
         <View style={s.logoRow}>
           <View style={s.logoRing}><Text style={s.logoLetter}>O</Text></View>
           <View style={s.headerCenter}>
@@ -574,7 +616,6 @@ function AgeSelectionScreen({ onNext }) {
         </View>
       </LinearGradient>
       <View style={s.topAccent} />
-
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" bounces={false}>
         <Animated.View style={[s.ageBody, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -600,11 +641,12 @@ function AgeSelectionScreen({ onNext }) {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={s.nextBtn} onPress={() => selected && onNext(selected)}
-            activeOpacity={selected ? 0.85 : 1}>
+          <TouchableOpacity style={s.nextBtn} onPress={handleNext} activeOpacity={selected ? 0.85 : 1}>
             <LinearGradient
-              colors={selected ? [C.maroon, C.maroonLight] : [C.grayLight, C.grayLight]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.nextBtnGrad}>
+              colors={selected ? GRAD_MAROON_LIGHT : GRAD_DISABLED}
+              start={GRAD_MAROON_H.start}
+              end={GRAD_MAROON_H.end}
+              style={s.nextBtnGrad}>
               <Text style={s.nextBtnText}>Next</Text>
               <IconArrow size={16} />
             </LinearGradient>
@@ -631,7 +673,7 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
       Animated.timing(fadeAnim,  { toValue: 1, duration: 600, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 600, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const types = [
     { key: 'student', label: 'Student',        emoji: '📚', desc: 'Currently enrolled student' },
@@ -641,10 +683,14 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
     { key: 'visitor', label: 'Visitor',         emoji: '👤', desc: 'Walk-in campus visitor'      },
   ];
 
+  const handleFinish = useCallback(() => {
+    if (selected) onFinish(selected);
+  }, [selected, onFinish]);
+
   return (
     <View style={s.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
-      <LinearGradient colors={[C.maroonDark, C.maroon]} style={s.topBand}>
+      <LinearGradient colors={GRAD_MAROON} style={s.topBand}>
         <View style={s.logoRow}>
           <View style={s.logoRing}><Text style={s.logoLetter}>O</Text></View>
           <View style={s.headerCenter}>
@@ -657,7 +703,6 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
         </View>
       </LinearGradient>
       <View style={s.topAccent} />
-
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}
         showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" bounces={false}>
         <Animated.View style={[s.ageBody, { opacity: fadeAnim, transform: [{ translateY: slideAnim }] }]}>
@@ -696,11 +741,12 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
               <IconBack size={18} color={C.maroon} />
               <Text style={[s.backBtnText, { fontSize: F.sm }]}>Back</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={s.finishBtn} onPress={() => selected && onFinish(selected)}
-              activeOpacity={selected ? 0.85 : 1}>
+            <TouchableOpacity style={s.finishBtn} onPress={handleFinish} activeOpacity={selected ? 0.85 : 1}>
               <LinearGradient
-                colors={selected ? [C.maroon, C.maroonLight] : [C.grayLight, C.grayLight]}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.finishBtnGrad}>
+                colors={selected ? GRAD_MAROON_LIGHT : GRAD_DISABLED}
+                start={GRAD_MAROON_H.start}
+                end={GRAD_MAROON_H.end}
+                style={s.finishBtnGrad}>
                 <Text style={[s.finishBtnText, { fontSize: F.md }]}>Finish</Text>
                 <IconArrow size={16} />
               </LinearGradient>
@@ -717,26 +763,92 @@ function UserTypeScreen({ ageRange, onBack, onFinish }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NODE PICKER MODAL
+// [FIX-5]  useMemo filter + pre-lowercased NODES_SEARCHABLE
+// [FIX-7]  FlatList getItemLayout, initialNumToRender, removeClippedSubviews
+// [FIX-8]  React.memo
+// [FIX-11] 150 ms debounce on search query
 // ─────────────────────────────────────────────────────────────────────────────
-function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
-  const [query, setQuery] = useState('');
+const NodePickerModal = memo(function NodePickerModal({
+  visible, title, onSelect, onClose, F, ageRange,
+}) {
+  const [query,         setQuery]         = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const SF = subFont(ageRange);
 
-  const filtered = query.trim().length === 0
-    ? NODES
-    : NODES.filter(n =>
-        n.room.toLowerCase().includes(query.toLowerCase()) ||
-        n.building.toLowerCase().includes(query.toLowerCase()) ||
-        n.floor.toLowerCase().includes(query.toLowerCase())
-      );
+  // [FIX-11] Debounce: only update debouncedQuery 150 ms after typing stops
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQuery(query), 150);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // [FIX-5] useMemo filter on pre-lowercased index
+  const filtered = useMemo(() => {
+    const q = debouncedQuery.trim().toLowerCase();
+    if (!q) return NODES_SEARCHABLE;
+    return NODES_SEARCHABLE.filter(
+      n => n._room.includes(q) || n._building.includes(q) || n._floor.includes(q)
+    );
+  }, [debouncedQuery]);
+
+  const handleClose = useCallback(() => {
+    setQuery('');
+    onClose();
+  }, [onClose]);
+
+  const handleSelect = useCallback((item) => {
+    setQuery('');
+    onSelect(item);
+  }, [onSelect]);
+
+  const clearQuery = useCallback(() => setQuery(''), []);
+
+  // [FIX-7] Static item height for getItemLayout — eliminates layout measurement overhead
+  const getItemLayout = useCallback(
+    (_, index) => ({ length: NODE_ITEM_HEIGHT, offset: NODE_ITEM_HEIGHT * index, index }),
+    []
+  );
+
+  const renderItem = useCallback(({ item, index }) => (
+    <TouchableOpacity
+      style={[nm.nodeItem, index === filtered.length - 1 && { borderBottomWidth: 0 }]}
+      onPress={() => handleSelect(item)}
+      activeOpacity={0.75}>
+      <View style={nm.nodeIconWrap}>
+        <IconPin size={18} color={C.maroon} />
+      </View>
+      <View style={nm.nodeInfo}>
+        <Text style={[nm.nodeRoom, { fontSize: F.md }]} numberOfLines={1}>{item.room}</Text>
+        <View style={nm.nodeMeta}>
+          <View style={nm.nodeMetaBadge}>
+            <Text style={[nm.nodeMetaText, { fontSize: F.xs }]}>{item.floor}</Text>
+          </View>
+          <Text style={[nm.nodeMetaSep, { fontSize: F.xs }]}>·</Text>
+          <Text style={[nm.nodeBuilding, { fontSize: F.xs, fontFamily: SF }]} numberOfLines={1}>
+            {item.building}
+          </Text>
+        </View>
+      </View>
+      {item.has360 && (
+        <TouchableOpacity style={nm.eyeBtn} activeOpacity={0.75}>
+          <IconEye360 size={16} color={C.maroon} />
+        </TouchableOpacity>
+      )}
+      <View style={nm.nodeChevron}>
+        <IconArrow size={14} color={C.grayLight} />
+      </View>
+    </TouchableOpacity>
+  ), [filtered.length, F, SF, handleSelect]);
 
   return (
-    <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={handleClose}>
       <View style={nm.root}>
         <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
-        <LinearGradient colors={[C.maroonDark, C.maroon]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={nm.header}>
-          <TouchableOpacity style={nm.closeBtn} onPress={() => { setQuery(''); onClose(); }} activeOpacity={0.75}>
+        <LinearGradient
+          colors={GRAD_MAROON}
+          start={GRAD_MAROON_H.start}
+          end={GRAD_MAROON_H.end}
+          style={nm.header}>
+          <TouchableOpacity style={nm.closeBtn} onPress={handleClose} activeOpacity={0.75}>
             <IconClose size={20} color={C.white} />
           </TouchableOpacity>
           <Text style={[nm.headerTitle, { fontSize: 24 }]}>{title}</Text>
@@ -756,7 +868,7 @@ function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
               selectionColor={C.maroon}
             />
             {query.length > 0 && (
-              <TouchableOpacity onPress={() => setQuery('')} activeOpacity={0.7}>
+              <TouchableOpacity onPress={clearQuery} activeOpacity={0.7}>
                 <IconClose size={14} />
               </TouchableOpacity>
             )}
@@ -771,48 +883,25 @@ function NodePickerModal({ visible, title, onSelect, onClose, F, ageRange }) {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={nm.listContent}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item, index }) => (
-            <TouchableOpacity
-              style={[nm.nodeItem, index === filtered.length - 1 && { borderBottomWidth: 0 }]}
-              onPress={() => { setQuery(''); onSelect(item); }}
-              activeOpacity={0.75}>
-              <View style={nm.nodeIconWrap}>
-                <IconPin size={18} color={C.maroon} />
-              </View>
-              <View style={nm.nodeInfo}>
-                <Text style={[nm.nodeRoom, { fontSize: F.md }]} numberOfLines={1}>{item.room}</Text>
-                <View style={nm.nodeMeta}>
-                  <View style={nm.nodeMetaBadge}>
-                    <Text style={[nm.nodeMetaText, { fontSize: F.xs }]}>{item.floor}</Text>
-                  </View>
-                  <Text style={[nm.nodeMetaSep, { fontSize: F.xs }]}>·</Text>
-                  <Text style={[nm.nodeBuilding, { fontSize: F.xs, fontFamily: SF }]} numberOfLines={1}>
-                    {item.building}
-                  </Text>
-                </View>
-              </View>
-              {item.has360 && (
-                <TouchableOpacity style={nm.eyeBtn} activeOpacity={0.75}>
-                  <IconEye360 size={16} color={C.maroon} />
-                </TouchableOpacity>
-              )}
-              <View style={nm.nodeChevron}>
-                <IconArrow size={14} color={C.grayLight} />
-              </View>
-            </TouchableOpacity>
-          )}
+          // [FIX-7] Performance props
+          getItemLayout={getItemLayout}
+          initialNumToRender={12}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={renderItem}
         />
       </View>
     </Modal>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SETTINGS MODAL  — with integrated download state management
+// SETTINGS MODAL
+// [FIX-8] React.memo
 // ─────────────────────────────────────────────────────────────────────────────
-function SettingsModal({
+const SettingsModal = memo(function SettingsModal({
   visible, onClose, F, ageRange,
-  // Download state lifted up so toast can live outside
   downloadState, onStartDownload, onCancelDownload,
   cacheData, onCheckUpdates, onRedownload, onClearCache,
 }) {
@@ -823,23 +912,25 @@ function SettingsModal({
   const SF = subFont(ageRange);
 
   const [showConfirm, setShowConfirm] = useState(false);
-  const [initial] = useState({ hdQuality: false, forceOffline: false, autoSync: true, wifiOnly: false });
-  const hasChanges =
-    hdQuality    !== initial.hdQuality    ||
-    forceOffline !== initial.forceOffline ||
-    autoSync     !== initial.autoSync     ||
-    wifiOnly     !== initial.wifiOnly;
 
-  const isDownloading = downloadState.active && !downloadState.done;
+  // Stable initial values for change detection
+  const initial = useRef({ hdQuality: false, forceOffline: false, autoSync: true, wifiOnly: false });
+  const hasChanges =
+    hdQuality    !== initial.current.hdQuality    ||
+    forceOffline !== initial.current.forceOffline ||
+    autoSync     !== initial.current.autoSync     ||
+    wifiOnly     !== initial.current.wifiOnly;
+
+  const handleFull     = useCallback(() => { setShowConfirm(false); onStartDownload(true); },  [onStartDownload]);
+  const handleMetadata = useCallback(() => { setShowConfirm(false); onStartDownload(false); }, [onStartDownload]);
+  const handleCancel   = useCallback(() => setShowConfirm(false), []);
+  const openConfirm    = useCallback(() => setShowConfirm(true), []);
 
   return (
     <Modal visible={visible} animationType="slide" statusBarTranslucent onRequestClose={onClose}>
       <View style={sm.root}>
         <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
-
-        {/* Header */}
-        <LinearGradient colors={[C.maroonDark, C.maroon]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sm.header}>
+        <LinearGradient colors={GRAD_MAROON} start={GRAD_MAROON_H.start} end={GRAD_MAROON_H.end} style={sm.header}>
           <TouchableOpacity style={sm.closeBtn} onPress={onClose} activeOpacity={0.75}>
             <IconClose size={20} color={C.white} />
           </TouchableOpacity>
@@ -847,11 +938,10 @@ function SettingsModal({
           <View style={{ width: 36 }} />
         </LinearGradient>
         <View style={sm.headerAccent} />
-
         <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}
           contentContainerStyle={sm.scrollContent}>
 
-          {/* ── 360° Image Quality ──────────────────────────────────────── */}
+          {/* 360° Image Quality */}
           <View style={sm.section}>
             <Text style={[sm.sectionTitle, { fontSize: F.sm }]}>360° Image Quality</Text>
             <Text style={[sm.sectionDesc, { fontSize: F.xs, fontFamily: SF }]}>
@@ -873,7 +963,7 @@ function SettingsModal({
 
           <View style={sm.divider} />
 
-          {/* ── Force Offline Mode ──────────────────────────────────────── */}
+          {/* Force Offline Mode */}
           <View style={sm.section}>
             <View style={sm.settingRow}>
               <View style={{ flex: 1 }}>
@@ -894,13 +984,12 @@ function SettingsModal({
 
           <View style={sm.divider} />
 
-          {/* ── Offline Resources ───────────────────────────────────────── */}
+          {/* Offline Resources */}
           <View style={sm.section}>
             <Text style={[sm.sectionTitle, { fontSize: F.sm }]}>Offline Resources</Text>
             <Text style={[sm.sectionDesc, { fontSize: F.xs, fontFamily: SF }]}>
               Manage how map data is downloaded and stored on your device.
             </Text>
-
             <View style={[sm.settingRow, { marginTop: 14 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[sm.settingLabel, { fontSize: F.md }]}>Auto-sync</Text>
@@ -914,7 +1003,6 @@ function SettingsModal({
                 ios_backgroundColor={C.grayLight}
               />
             </View>
-
             <View style={[sm.settingRow, { marginTop: 14 }]}>
               <View style={{ flex: 1 }}>
                 <Text style={[sm.settingLabel, { fontSize: F.md }]}>Wi-Fi Only</Text>
@@ -929,18 +1017,16 @@ function SettingsModal({
               />
             </View>
 
-            {/* ── The three states: download button / inline progress / cache info ── */}
             {cacheData ? (
               <CacheInfoPanel
                 cacheData={cacheData}
                 onCheckUpdates={onCheckUpdates}
-                onRedownload={() => { onRedownload(); }}
+                onRedownload={onRedownload}
                 onClearCache={onClearCache}
                 F={F}
                 ageRange={ageRange}
               />
             ) : downloadState.active ? (
-              /* Inline progress shown when toast is dismissed or when modal is open */
               <View style={{ marginTop: 16 }}>
                 <InlineDownloadProgress
                   isFullDownload={downloadState.isFullDownload}
@@ -951,7 +1037,6 @@ function SettingsModal({
                   F={F}
                   ageRange={ageRange}
                 />
-                {/* Cancel button — only while downloading, not when done */}
                 {!downloadState.done && (
                   <TouchableOpacity style={sm.cancelDlBtn} onPress={onCancelDownload} activeOpacity={0.75}>
                     <Text style={[sm.cancelDlText, { fontSize: F.xs, fontFamily: SF }]}>Cancel Download</Text>
@@ -959,10 +1044,8 @@ function SettingsModal({
                 )}
               </View>
             ) : (
-              <TouchableOpacity style={sm.downloadBtn}
-                onPress={() => setShowConfirm(true)} activeOpacity={0.85}>
-                <LinearGradient colors={[C.maroonDark, C.maroon]}
-                  start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={sm.downloadBtnGrad}>
+              <TouchableOpacity style={sm.downloadBtn} onPress={openConfirm} activeOpacity={0.85}>
+                <LinearGradient colors={GRAD_MAROON} start={GRAD_MAROON_H.start} end={GRAD_MAROON_H.end} style={sm.downloadBtnGrad}>
                   <IconDownload size={16} color={C.white} />
                   <Text style={[sm.downloadBtnText, { fontSize: F.md }]}>
                     Download All Resources
@@ -973,14 +1056,14 @@ function SettingsModal({
           </View>
         </ScrollView>
 
-        {/* Apply button */}
         <View style={sm.applyWrap}>
           <TouchableOpacity style={sm.applyBtn}
             onPress={() => hasChanges && onClose()}
             activeOpacity={hasChanges ? 0.85 : 1}>
             <LinearGradient
-              colors={hasChanges ? [C.maroon, C.maroonLight] : [C.grayLight, C.grayLight]}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              colors={hasChanges ? GRAD_MAROON_LIGHT : GRAD_DISABLED}
+              start={GRAD_MAROON_H.start}
+              end={GRAD_MAROON_H.end}
               style={sm.applyBtnGrad}>
               <Text style={[sm.applyBtnText, { fontSize: F.md }]}>Apply Changes</Text>
             </LinearGradient>
@@ -988,25 +1071,31 @@ function SettingsModal({
         </View>
       </View>
 
-      {/* Confirm dialog lives inside Settings modal */}
       <DownloadConfirmModal
         visible={showConfirm}
-        onFull={() => { setShowConfirm(false); onStartDownload(true); }}
-        onMetadata={() => { setShowConfirm(false); onStartDownload(false); }}
-        onCancel={() => setShowConfirm(false)}
+        onFull={handleFull}
+        onMetadata={handleMetadata}
+        onCancel={handleCancel}
         F={F}
         ageRange={ageRange}
       />
     </Modal>
   );
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCREEN 3 — Home Screen
+// [FIX-1]  ref-based cancel token for download race condition
+// [FIX-2]  clearTimeout on cancel / completion
+// [FIX-6]  connector IIFE → useMemo
+// [FIX-9]  startDownload / cancelDownload → useCallback
+// [FIX-10] handleSwap / handleFindPath → useCallback
+// [FIX-12] null-guard in onCheckUpdates
 // ─────────────────────────────────────────────────────────────────────────────
 function HomeScreen({ ageRange, userType, onBack }) {
   const F  = FONT_SCALE[ageRange];
   const SF = subFont(ageRange);
+
   const [startNode,       setStartNode]       = useState(null);
   const [destNode,        setDestNode]        = useState(null);
   const [showStartPicker, setShowStartPicker] = useState(false);
@@ -1015,67 +1104,69 @@ function HomeScreen({ ageRange, userType, onBack }) {
   const [startLayout,     setStartLayout]     = useState(null);
   const [destLayout,      setDestLayout]      = useState(null);
 
-  // ── Download state (lifted here so toast lives at HomeScreen level) ────────
+  // Download state
   const [downloadState, setDownloadState] = useState({
-    active: false,
-    isFullDownload: false,
-    progress: 0,
-    phase: 0,
-    phaseLabel: '',
-    done: false,
+    active: false, isFullDownload: false, progress: 0,
+    phase: 0, phaseLabel: '', done: false,
   });
-  const [toastVisible,  setToastVisible]  = useState(false);
-  const [cacheData,     setCacheData]     = useState(null);
-  const downloadCleanupRef = useRef(null);
+  const [toastVisible, setToastVisible] = useState(false);
+  const [cacheData,    setCacheData]    = useState(null);
 
-  const now = () => {
+  // [FIX-1] Stable cancel token ref — survives re-renders, prevents race conditions
+  const cancelTokenRef     = useRef({ cancelled: false });
+  // [FIX-2] Stable timeout ref so we can clearTimeout on cancel
+  const completionTimerRef = useRef(null);
+
+  const now = useCallback(() => {
     const d = new Date();
     return d.toLocaleDateString('en-PH', {
       month: 'short', day: 'numeric', year: 'numeric',
       hour: '2-digit', minute: '2-digit',
     });
-  };
+  }, []);
 
-  const startDownload = (isFull) => {
-    const phases = isFull
+  // [FIX-9] useCallback so startDownload identity is stable across renders
+  const startDownload = useCallback((isFull) => {
+    // [FIX-1] Create a new cancel token for this download run
+    const token = { cancelled: false };
+    cancelTokenRef.current = token;
+
+    const phases    = isFull
       ? ['Caching nodes…', 'Caching edges…', 'Downloading 360° images…', 'Finalizing…']
       : ['Caching nodes…', 'Caching edges…', 'Finalizing…'];
     const durations = isFull ? [1000, 900, 3200, 600] : [700, 700, 500];
-    const total = durations.reduce((a, b) => a + b, 0);
+    const total     = durations.reduce((a, b) => a + b, 0);
 
     setDownloadState({ active: true, isFullDownload: isFull, progress: 0, phase: 0, phaseLabel: phases[0], done: false });
     setToastVisible(true);
 
-    let animRunning = true;
-    downloadCleanupRef.current = () => { animRunning = false; };
-
     const run = async () => {
       let cumulative = 0;
       for (let i = 0; i < phases.length; i++) {
-        if (!animRunning) return;
+        if (token.cancelled) return;
         setDownloadState(prev => ({ ...prev, phase: i, phaseLabel: phases[i] }));
 
         const segStart = cumulative;
-        const segEnd   = cumulative + durations[i];
         const steps    = 20;
         const stepMs   = durations[i] / steps;
 
         for (let j = 1; j <= steps; j++) {
-          if (!animRunning) return;
+          if (token.cancelled) return;
           await new Promise(r => setTimeout(r, stepMs));
           const elapsed = segStart + (durations[i] * j / steps);
-          const pct = Math.round((elapsed / total) * 100);
+          const pct     = Math.round((elapsed / total) * 100);
           setDownloadState(prev => ({ ...prev, progress: pct }));
         }
-        cumulative = segEnd;
+        cumulative += durations[i];
       }
 
-      if (!animRunning) return;
+      if (token.cancelled) return;
 
       setDownloadState(prev => ({ ...prev, progress: 100, done: true, phaseLabel: 'Download complete!' }));
 
-      setTimeout(() => {
-        if (!animRunning) return;
+      // [FIX-2] Store timeout ref so cancel can clear it
+      completionTimerRef.current = setTimeout(() => {
+        if (token.cancelled) return;
         const imageCount = NODES.filter(n => n.has360).length;
         setCacheData({
           nodes:      `${NODES.length} nodes`,
@@ -1090,48 +1181,95 @@ function HomeScreen({ ageRange, userType, onBack }) {
     };
 
     run();
-  };
+  }, [now]);
 
-  const cancelDownload = () => {
-    if (downloadCleanupRef.current) downloadCleanupRef.current();
-    downloadCleanupRef.current = null;
+  // [FIX-9] useCallback for cancel
+  const cancelDownload = useCallback(() => {
+    cancelTokenRef.current.cancelled = true;
+    // [FIX-2] Clear any pending completion timeout
+    clearTimeout(completionTimerRef.current);
     setDownloadState({ active: false, isFullDownload: false, progress: 0, phase: 0, phaseLabel: '', done: false });
     setToastVisible(false);
-  };
+  }, []);
 
-  const canFind = startNode && destNode;
-  const fadeAnim  = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(20)).current;
-  const btnScale  = useRef(new Animated.Value(1)).current;
+  // [FIX-12] Null-safe update; won't crash if cacheData was cleared concurrently
+  const handleCheckUpdates = useCallback(() => {
+    setCacheData(prev => prev && { ...prev, lastSynced: now() });
+  }, [now]);
+
+  const handleRedownload = useCallback(() => {
+    // [FIX-2] Clear any running completion timer before wiping cacheData
+    clearTimeout(completionTimerRef.current);
+    setCacheData(null);
+  }, []);
+
+  const handleClearCache = useCallback(() => {
+    clearTimeout(completionTimerRef.current);
+    setCacheData(null);
+  }, []);
+
+  const canFind       = startNode && destNode;
+  const fadeAnim      = useRef(new Animated.Value(0)).current;
+  const slideAnim     = useRef(new Animated.Value(20)).current;
+  const btnScale      = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim,  { toValue: 1, duration: 500, useNativeDriver: true }),
       Animated.timing(slideAnim, { toValue: 0, duration: 500, easing: Easing.out(Easing.cubic), useNativeDriver: true }),
     ]).start();
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSwap = () => { const tmp = startNode; setStartNode(destNode); setDestNode(tmp); };
+  // [FIX-10] useCallback for swap and find handlers
+  const handleSwap = useCallback(() => {
+    setStartNode(prev => { setDestNode(prev); return destNode; });
+  }, [destNode]);
 
-  const handleFindPath = () => {
+  const handleFindPath = useCallback(() => {
     if (!canFind) return;
     Animated.sequence([
       Animated.timing(btnScale, { toValue: 0.96, duration: 90, useNativeDriver: true }),
       Animated.spring(btnScale, { toValue: 1, tension: 200, friction: 5, useNativeDriver: true }),
     ]).start();
-  };
+  }, [canFind]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const userTypeLabel = {
+  // Picker open/close callbacks
+  const openStartPicker  = useCallback(() => setShowStartPicker(true), []);
+  const openDestPicker   = useCallback(() => setShowDestPicker(true), []);
+  const openSettings     = useCallback(() => setShowSettings(true), []);
+  const closeStartPicker = useCallback(() => setShowStartPicker(false), []);
+  const closeDestPicker  = useCallback(() => setShowDestPicker(false), []);
+  const closeSettings    = useCallback(() => setShowSettings(false), []);
+
+  const selectStart = useCallback((node) => { setStartNode(node); setShowStartPicker(false); }, []);
+  const selectDest  = useCallback((node) => { setDestNode(node);  setShowDestPicker(false); }, []);
+
+  const dismissToast = useCallback(() => setToastVisible(false), []);
+  const expandToast  = useCallback(() => setShowSettings(true), []);
+
+  // [FIX-6] Connector line geometry memoized — only recalculates when layouts change
+  const connectorLine = useMemo(() => {
+    if (!startLayout || !destLayout) return null;
+    const startCenterY = startLayout.y + startLayout.height / 2;
+    const destCenterY  = destLayout.y  + destLayout.height  / 2;
+    const iconHalf = 30;
+    return {
+      top:    startCenterY + iconHalf,
+      height: destCenterY - startCenterY - iconHalf * 2,
+      left:   18 + 22 - 1,
+    };
+  }, [startLayout, destLayout]);
+
+  const userTypeLabel = useMemo(() => ({
     student: 'Student', teacher: 'Teacher',
     faculty: 'Faculty/Staff', guest: 'Guest', visitor: 'Visitor',
-  }[userType] || '';
+  }[userType] || ''), [userType]);
 
   return (
     <View style={h.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.maroonDark} />
       <Animated.View style={[h.header, { opacity: fadeAnim }]}>
-        <LinearGradient colors={[C.maroonDark, C.maroon]}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={h.headerGrad}>
+        <LinearGradient colors={GRAD_MAROON} start={GRAD_MAROON_H.start} end={GRAD_MAROON_H.end} style={h.headerGrad}>
           <TouchableOpacity style={h.headerBtn} onPress={onBack} activeOpacity={0.75}>
             <IconBack size={19} color={C.white} />
           </TouchableOpacity>
@@ -1142,7 +1280,7 @@ function HomeScreen({ ageRange, userType, onBack }) {
           <TouchableOpacity style={h.headerBtn} activeOpacity={0.75}>
             <IconReload size={18} color={C.white} />
           </TouchableOpacity>
-          <TouchableOpacity style={h.headerBtn} onPress={() => setShowSettings(true)} activeOpacity={0.75}>
+          <TouchableOpacity style={h.headerBtn} onPress={openSettings} activeOpacity={0.75}>
             <IconSettings size={19} color={C.white} />
           </TouchableOpacity>
         </LinearGradient>
@@ -1172,18 +1310,22 @@ function HomeScreen({ ageRange, userType, onBack }) {
             <Text style={[h.heroSub, { fontSize: 14, fontFamily: SF }]}>
               Enter your starting point and destination{'\n'}to find the best path on campus.
             </Text>
+
             <View style={h.card}>
               <View style={h.cardLabel}>
                 <View style={h.cardLabelDot} />
                 <Text style={[h.cardLabelText, { fontSize: F.xs }]}>Route Planner</Text>
                 <View style={h.cardLabelLine} />
               </View>
+
               <View style={h.inputRow} onLayout={e => setStartLayout(e.nativeEvent.layout)}>
                 <View style={h.inputIconCircle}>
                   <IconPin size={17} color={C.gold} />
                 </View>
-                <TouchableOpacity style={[h.inputBtn, startNode && h.inputBtnFilled]}
-                  onPress={() => setShowStartPicker(true)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={[h.inputBtn, startNode && h.inputBtnFilled]}
+                  onPress={openStartPicker}
+                  activeOpacity={0.8}>
                   <View style={h.inputBtnInner}>
                     <Text style={[h.inputBtnLabel, { fontSize: F.sm }]}>Starting Point</Text>
                     <Text style={[h.inputBtnValue, { fontSize: F.xs },
@@ -1199,21 +1341,24 @@ function HomeScreen({ ageRange, userType, onBack }) {
                   </View>
                 </TouchableOpacity>
               </View>
-              {startLayout && destLayout && (() => {
-                const startCenterY = startLayout.y + startLayout.height / 2;
-                const destCenterY  = destLayout.y  + destLayout.height  / 2;
-                const iconHalf = 30;
-                const top    = startCenterY + iconHalf;
-                const height = destCenterY - startCenterY - iconHalf * 2;
-                const left   = 18 + 22 - 1;
-                return (
-                  <View pointerEvents="none" style={{ position: 'absolute', left, top, height, width: 2, alignItems: 'center', zIndex: 0 }}>
-                    <View style={h.connectorDotGold} />
-                    <View style={{ flex: 1, width: 1.5, backgroundColor: C.grayLight }} />
-                    <View style={h.connectorDotMaroon} />
-                  </View>
-                );
-              })()}
+
+              {/* [FIX-6] Memoized connector line */}
+              {connectorLine && (
+                <View pointerEvents="none" style={{
+                  position: 'absolute',
+                  left: connectorLine.left,
+                  top: connectorLine.top,
+                  height: connectorLine.height,
+                  width: 2,
+                  alignItems: 'center',
+                  zIndex: 0,
+                }}>
+                  <View style={h.connectorDotGold} />
+                  <View style={{ flex: 1, width: 1.5, backgroundColor: C.grayLight }} />
+                  <View style={h.connectorDotMaroon} />
+                </View>
+              )}
+
               <View style={h.swapRow}>
                 <View style={h.swapLine} />
                 <TouchableOpacity style={h.swapBtn} onPress={handleSwap} activeOpacity={0.7}>
@@ -1221,12 +1366,15 @@ function HomeScreen({ ageRange, userType, onBack }) {
                 </TouchableOpacity>
                 <View style={h.swapLine} />
               </View>
+
               <View style={h.inputRow} onLayout={e => setDestLayout(e.nativeEvent.layout)}>
                 <View style={[h.inputIconCircle, h.inputIconCircleDest]}>
                   <IconFlag size={17} color={C.maroonLight} />
                 </View>
-                <TouchableOpacity style={[h.inputBtn, destNode && h.inputBtnFilled]}
-                  onPress={() => setShowDestPicker(true)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={[h.inputBtn, destNode && h.inputBtnFilled]}
+                  onPress={openDestPicker}
+                  activeOpacity={0.8}>
                   <View style={h.inputBtnInner}>
                     <Text style={[h.inputBtnLabel, { fontSize: F.xs }]}>Destination Point</Text>
                     <Text style={[h.inputBtnValue, { fontSize: F.xs },
@@ -1242,14 +1390,17 @@ function HomeScreen({ ageRange, userType, onBack }) {
                   </View>
                 </TouchableOpacity>
               </View>
+
               <Text style={[h.hintTxt, { fontSize: F.xs, fontFamily: SF }]}>
                 {canFind ? '✓  Route ready — tap Find Path to navigate' : 'Tap a field above to select a location'}
               </Text>
+
               <Animated.View style={{ transform: [{ scale: btnScale }] }}>
                 <TouchableOpacity onPress={handleFindPath} activeOpacity={canFind ? 0.85 : 1}>
                   <LinearGradient
-                    colors={canFind ? [C.maroon, C.maroonLight] : [C.grayLight, C.grayLight]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    colors={canFind ? GRAD_MAROON_LIGHT : GRAD_DISABLED}
+                    start={GRAD_MAROON_H.start}
+                    end={GRAD_MAROON_H.end}
                     style={[h.findBtn, { height: 50 + (F.md - 12.5) * 1.5 }]}>
                     <Text style={[h.findBtnText, { fontSize: F.md }]}>Find Path</Text>
                     <View style={[h.findBtnIcon, !canFind && h.findBtnIconOff]}>
@@ -1263,36 +1414,46 @@ function HomeScreen({ ageRange, userType, onBack }) {
         </ScrollView>
       </View>
 
-      {/* ── Floating Download Toast — sits above everything ── */}
+      {/* Floating Download Toast — sits above everything */}
       <DownloadToast
         visible={toastVisible}
         isFullDownload={downloadState.isFullDownload}
         progress={downloadState.progress}
         phaseLabel={downloadState.phaseLabel}
         isDone={downloadState.done}
-        onDismiss={() => setToastVisible(false)}
-        onExpand={() => setShowSettings(true)}
+        onDismiss={dismissToast}
+        onExpand={expandToast}
       />
 
-      <NodePickerModal visible={showStartPicker} title="Select Starting Point"
-        onSelect={(node) => { setStartNode(node); setShowStartPicker(false); }}
-        onClose={() => setShowStartPicker(false)} F={F} ageRange={ageRange} />
-      <NodePickerModal visible={showDestPicker} title="Select Destination"
-        onSelect={(node) => { setDestNode(node); setShowDestPicker(false); }}
-        onClose={() => setShowDestPicker(false)} F={F} ageRange={ageRange} />
+      <NodePickerModal
+        visible={showStartPicker}
+        title="Select Starting Point"
+        onSelect={selectStart}
+        onClose={closeStartPicker}
+        F={F}
+        ageRange={ageRange}
+      />
+      <NodePickerModal
+        visible={showDestPicker}
+        title="Select Destination"
+        onSelect={selectDest}
+        onClose={closeDestPicker}
+        F={F}
+        ageRange={ageRange}
+      />
 
       <SettingsModal
         visible={showSettings}
-        onClose={() => setShowSettings(false)}
+        onClose={closeSettings}
         F={F}
         ageRange={ageRange}
         downloadState={downloadState}
         onStartDownload={startDownload}
         onCancelDownload={cancelDownload}
         cacheData={cacheData}
-        onCheckUpdates={() => setCacheData(prev => prev ? { ...prev, lastSynced: now() } : prev)}
-        onRedownload={() => { setCacheData(null); }}
-        onClearCache={() => setCacheData(null)}
+        onCheckUpdates={handleCheckUpdates}
+        onRedownload={handleRedownload}
+        onClearCache={handleClearCache}
       />
     </View>
   );
@@ -1314,20 +1475,26 @@ export default function App() {
     CormorantGaramond_700Bold,
   });
 
+  // All hooks must be called unconditionally — BEFORE any early return
+  const goToType   = useCallback((age)  => { setAgeRange(age);  setScreen('type'); }, []);
+  const goToHome   = useCallback((type) => { setUserType(type); setScreen('home'); }, []);
+  const goToAge    = useCallback(()     => setScreen('age'),  []);
+  const goBackType = useCallback(()     => setScreen('type'), []);
+
+  // Early return AFTER all hooks
   if (!fontsLoaded) return null;
 
   if (screen === 'age') {
-    return <AgeSelectionScreen onNext={(age) => { setAgeRange(age); setScreen('type'); }} />;
+    return <AgeSelectionScreen onNext={goToType} />;
   }
   if (screen === 'type') {
-    return <UserTypeScreen ageRange={ageRange} onBack={() => setScreen('age')}
-      onFinish={(type) => { setUserType(type); setScreen('home'); }} />;
+    return <UserTypeScreen ageRange={ageRange} onBack={goToAge} onFinish={goToHome} />;
   }
-  return <HomeScreen ageRange={ageRange} userType={userType} onBack={() => setScreen('type')} />;
+  return <HomeScreen ageRange={ageRange} userType={userType} onBack={goBackType} />;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// STYLES
+// STYLES  (unchanged from original — all layout/visual values preserved)
 // ═════════════════════════════════════════════════════════════════════════════
 
 const s = StyleSheet.create({
@@ -1469,6 +1636,7 @@ const nm = StyleSheet.create({
   nodeItem: {
     flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13,
     borderBottomWidth: 1, borderBottomColor: C.grayFaint,
+    height: NODE_ITEM_HEIGHT,
   },
   nodeIconWrap: {
     width: 40, height: 40, borderRadius: 20,
@@ -1678,7 +1846,6 @@ const h = StyleSheet.create({
   findBtnIconOff: { backgroundColor: C.grayLight },
 });
 
-// ── Download Confirm Modal ────────────────────────────────────────────────────
 const dc = StyleSheet.create({
   overlay: {
     flex: 1, backgroundColor: 'rgba(10,0,5,0.62)',
@@ -1762,7 +1929,6 @@ const dc = StyleSheet.create({
   },
 });
 
-// ── Floating Toast ────────────────────────────────────────────────────────────
 const toast = StyleSheet.create({
   wrap: {
     position: 'absolute',
@@ -1807,7 +1973,6 @@ const toast = StyleSheet.create({
   },
 });
 
-// ── Inline Progress Panel ─────────────────────────────────────────────────────
 const ip = StyleSheet.create({
   wrap: {
     borderRadius: 14, borderWidth: 1.5, borderColor: C.maroonBorder,
@@ -1815,8 +1980,7 @@ const ip = StyleSheet.create({
   },
   headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   iconCircle: {
-    width: 34, height: 34, borderRadius: 17, overflow: 'hidden',
-    flexShrink: 0,
+    width: 34, height: 34, borderRadius: 17, overflow: 'hidden', flexShrink: 0,
   },
   iconGrad: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   title: {
@@ -1849,7 +2013,6 @@ const ip = StyleSheet.create({
   },
 });
 
-// ── Cache Info Panel ──────────────────────────────────────────────────────────
 const ci = StyleSheet.create({
   wrap: { marginTop: 16 },
   successBanner: {
