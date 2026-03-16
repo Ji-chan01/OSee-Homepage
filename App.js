@@ -1766,7 +1766,7 @@ const dc = StyleSheet.create({
 const toast = StyleSheet.create({
   wrap: {
     position: 'absolute',
-    top: Platform.OS === 'ios' ? 54 : 44,
+    bottom: Platform.OS === 'ios' ? 54 : 44,
     left: 12, right: 12,
     zIndex: 9999,
     borderRadius: 14,
